@@ -132,7 +132,6 @@ import { ref, computed } from "vue";
 import { VuePDF, usePDF } from "@tato30/vue-pdf";
 import JSZip from "jszip";
 import cssContent from "./style/style";
-import ConvertApi from "convertapi-js";
 
 const file = ref(null);
 const { pdf, pages } = usePDF(file);
@@ -146,7 +145,6 @@ const isFile = ref(false);
 const selectedPage = ref([]);
 const selectionType = ref("choice");
 const isConvert = ref(false);
-let svg = [];
 
 // common START
 function changeFile(event) {
@@ -298,119 +296,60 @@ function deletePage(i) {
   selectedPage.value.splice(i, 1);
 }
 
-async function convertChoicePDFToSVG(page) {
-  try {
-    const f = document.querySelector("#file");
-
-    let convertApi = ConvertApi.auth("bOeh9tn7vx3a2qXv");
-    let params = convertApi.createParams();
-    params.add("File", f.files[0]);
-    params.add("PageRange", `${page.join(",")}`);
-    isConvert.value = true;
-    const result = await convertApi.convert("pdf", "svg", params);
-    isConvert.value = false;
-    svg.push(...result.files);
-    console.log(result);
-    console.log(svg);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
 async function exportChoiceHTML() {
-  let _p = [];
   const zip = new JSZip(); // ZIP 객체 생성
   if (selectedPage.value.length < 1) selectChoicePage();
   selectedPage.value.forEach((v) => {
-    _p.push(v.page);
-    console.log("1", _p);
-  });
-  try {
-    await convertChoicePDFToSVG(_p);
-    // SVG 파일을 다운로드하고 ZIP 파일에 추가하는 Promise 배열 생성
-    const svgPromises = svg.map((file, index) => {
-      return new Promise((resolve, reject) => {
-        fetch(file.Url)
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error(`Failed to download SVG file: ${response.status}`);
-            }
-            return response.blob(); // Blob으로 변환
-          })
-          .then((blob) => {
-            // SVG 파일을 ZIP 파일에 추가
-            zip.folder("svg").file(`${fileName.value}_${String(_p[index]).padStart(3, "0")}.svg`, blob);
-            resolve(); // Promise 완료
-          })
-          .catch((error) => {
-            console.error("Error downloading SVG file:", error);
-            reject(error); // Promise 거부
-          });
-      });
-    });
-    await Promise.all(svgPromises);
-    selectedPage.value.forEach((v) => {
-      const _v = v.html;
-      const elReSelector =
-        "#header, .header, script, style, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
-      const elReClassSelector = ".v-application";
-      const elReStyleSelector = ".v-main";
+    const _v = v.html;
+    const elReSelector =
+      "#header, .header, script, style, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
+    const elReClassSelector = ".v-application";
+    const elReStyleSelector = ".v-main";
 
-      removeEl(_v, elReSelector, elReClassSelector, elReStyleSelector);
+    removeEl(_v, elReSelector, elReClassSelector, elReStyleSelector);
 
-      const linkElement = document.createElement("link");
-      linkElement.rel = "stylesheet";
-      linkElement.href = "./css/common.css";
-      _v.querySelector("head").appendChild(linkElement);
-      _v.querySelector(".pdfContainer").style.textAlign = "left";
-      // 페이지 제목 설정
-      _v.querySelector("title").textContent = `${fileName.value}_${String(v.page).padStart(3, "0")}`;
+    const linkElement = document.createElement("link");
+    linkElement.rel = "stylesheet";
+    linkElement.href = "./css/common.css";
+    _v.querySelector("head").appendChild(linkElement);
+    _v.querySelector(".pdfContainer").style.textAlign = "left";
+    // 페이지 제목 설정
+    _v.querySelector("title").textContent = `${fileName.value}_${String(v.page).padStart(3, "0")}`;
 
-      // 스크립트 직접 추가
-      const imageUrl = `./svg/${fileName.value}_${String(v.page).padStart(3, "0")}.svg`;
-      const scriptContent = `
+    // 스크립트 직접 추가
+    const scriptContent = `
       let canvas = document.querySelector("canvas");
       const context = canvas.getContext("2d");
       const base_image = new Image();
       base_image.src = "${v.data}";
-      canvas.style.display = 'none';
 
-
-      const img = new Image();
-      img.src = "${imageUrl}";
-      img.onload = function () {
-        img.style.width = base_image.width;
-        img.style.height = base_image.height;
-        const pdfWrap = document.querySelector(".pdf_wrap > div");
-        pdfWrap.prepend(img);
-      }
+      base_image.onload = function () {
+          canvas.width = base_image.width;
+          canvas.height = base_image.height;
+          context.drawImage(base_image, 0, 0);
+      };
       `;
 
-      const scriptFileName = `${fileName.value}_${String(v.page).padStart(3, "0")}.js`;
-      zip.folder("js").file(scriptFileName, scriptContent);
+    const scriptFileName = `${fileName.value}_${String(v.page).padStart(3, "0")}.js`;
+    zip.folder("js").file(scriptFileName, scriptContent);
 
-      const scriptElement = document.createElement("script");
-      scriptElement.src = `./js/${scriptFileName}`;
-      _v.querySelector("body").appendChild(scriptElement);
+    const scriptElement = document.createElement("script");
+    scriptElement.src = `./js/${scriptFileName}`;
+    _v.querySelector("body").appendChild(scriptElement);
 
-      // Blob 생성 및 ZIP 파일에 추가
-      const blob = new Blob([_v.innerHTML], { type: "text/html" });
-      zip.file(`${fileName.value}_${String(v.page).padStart(3, "0")}.html`, blob);
-    });
+    // Blob 생성 및 ZIP 파일에 추가
+    const blob = new Blob([_v.innerHTML], { type: "text/html" });
+    zip.file(`${fileName.value}_${String(v.page).padStart(3, "0")}.html`, blob);
+  });
 
-    zip.folder("css").file("common.css", cssContent);
-    const resZip = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(resZip);
-    const aTag = document.createElement("a");
+  zip.folder("css").file("common.css", cssContent);
+  const resZip = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(resZip);
+  const aTag = document.createElement("a");
 
-    aTag.download = fileName.value;
-    aTag.href = url;
-    aTag.click();
-    svg = [];
-    _p = [];
-  } catch (e) {
-    console.error("Error exporting HTML:", e);
-  }
+  aTag.download = fileName.value;
+  aTag.href = url;
+  aTag.click();
 }
 // 개별 선택 END
 
