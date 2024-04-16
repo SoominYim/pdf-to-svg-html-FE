@@ -12,6 +12,18 @@
         <span>변환중</span>
       </div>
     </div>
+    <div
+      class="convertLoading"
+      style="background: rgba(0, 0, 0, 0.3); width: 100vw; height: 100vh; position: absolute; z-index: 9999"
+      v-if="isUpload"
+    >
+      <div class="loading-overlay">
+        <div class="loader"></div>
+      </div>
+      <div style="position: relative; font-size: 50px; color: #f3f3f3; top: calc(50% - -75px); text-align: center">
+        <span>파일 업로드중</span>
+      </div>
+    </div>
     <div class="pdfContainer" style="text-align: center">
       <div class="header">
         <div v-if="!isFile">
@@ -25,9 +37,9 @@
             <p>{{ fileName }}.pdf</p>
           </li>
 
-          <li style="margin-right: 5px" v-show="!isFile" class="file_wrap">
-            <input id="file" type="file" accept=".pdf" @change="changeFile" />
+          <li style="margin-right: 5px" class="file_wrap">
             <label for="file">파일 첨부</label>
+            <input id="file" name="myFile" type="file" accept=".pdf" @change="changeFile" ref="fileInput" />
           </li>
           <li v-if="isFile && selectionType == 'choice'" class="page_wrap">
             <button @click="page = page > 1 ? page - 1 : page">&lt;</button>
@@ -145,6 +157,7 @@ const isFile = ref(false);
 const selectedPage = ref([]);
 const selectionType = ref("choice");
 const isConvert = ref(false);
+const isUpload = ref(false);
 
 // common START
 function changeFile(event) {
@@ -153,6 +166,25 @@ function changeFile(event) {
     file.value = URL.createObjectURL(selectedFile);
     fileName.value = selectedFile.name.split(".").slice(0, -1).join(".");
     isFile.value = true;
+    isUpload.value = true;
+    const formData = new FormData();
+    formData.append("myFile", selectedFile);
+
+    fetch("/upload", {
+      method: "POST",
+      body: formData,
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to upload file");
+        }
+        console.log("File uploaded successfully");
+        isUpload.value = false;
+      })
+      .catch((error) => {
+        console.error("Error uploading file:", error);
+        isUpload.value = false;
+      });
   }
 }
 
@@ -299,6 +331,31 @@ function deletePage(i) {
 async function exportChoiceHTML() {
   const zip = new JSZip(); // ZIP 객체 생성
   if (selectedPage.value.length < 1) selectChoicePage();
+
+  const pageData = {
+    type: "choice",
+    page: selectedPage.value.map((v) => v.page),
+  };
+
+  isConvert.value = true;
+  // /convert 요청 보내기
+  await fetch("/convert", {
+    method: "POST",
+    body: JSON.stringify(pageData), // 페이지 정보 데이터를 JSON 문자열로 변환하여 body에 포함
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const svgResponse = await fetch("/getSVGFiles");
+  const svgFiles = await svgResponse.json();
+
+  await svgFiles.forEach((svgFile, i) => {
+    const svgBlob = new Blob([svgFile], { type: "image/svg+xml" });
+    zip.folder("svg").file(`${fileName.value}_${String(selectedPage.value[i].page).padStart(3, "0")}.svg`, svgBlob);
+  });
+
+  isConvert.value = false;
+
   selectedPage.value.forEach((v) => {
     const _v = v.html;
     const elReSelector =
@@ -315,7 +372,6 @@ async function exportChoiceHTML() {
     _v.querySelector(".pdfContainer").style.textAlign = "left";
     // 페이지 제목 설정
     _v.querySelector("title").textContent = `${fileName.value}_${String(v.page).padStart(3, "0")}`;
-
     // 스크립트 직접 추가
     const scriptContent = `
       let canvas = document.querySelector("canvas");
