@@ -336,7 +336,7 @@ async function exportChoiceHTML() {
     type: "choice",
     page: selectedPage.value.map((v) => v.page),
   };
-
+  console.log(pageData);
   isConvert.value = true;
   // /convert 요청 보내기
   await fetch("/convert", {
@@ -372,18 +372,25 @@ async function exportChoiceHTML() {
     _v.querySelector(".pdfContainer").style.textAlign = "left";
     // 페이지 제목 설정
     _v.querySelector("title").textContent = `${fileName.value}_${String(v.page).padStart(3, "0")}`;
+
+    const imageUrl = `./svg/${fileName.value}_${String(v.page).padStart(3, "0")}.svg`;
     // 스크립트 직접 추가
     const scriptContent = `
       let canvas = document.querySelector("canvas");
       const context = canvas.getContext("2d");
       const base_image = new Image();
       base_image.src = "${v.data}";
+      canvas.style.display = 'none';
 
-      base_image.onload = function () {
-          canvas.width = base_image.width;
-          canvas.height = base_image.height;
-          context.drawImage(base_image, 0, 0);
-      };
+
+      const img = new Image();
+      img.src = "${imageUrl}";
+      img.onload = function () {
+        img.style.width = base_image.width;
+        img.style.height = base_image.height;
+        const pdfWrap = document.querySelector(".pdf_wrap > div");
+        pdfWrap.prepend(img);
+      }
       `;
 
     const scriptFileName = `${fileName.value}_${String(v.page).padStart(3, "0")}.js`;
@@ -432,13 +439,38 @@ function resetLastPage(e) {
   e.target.value = lastPage.value;
 }
 
-function exportRangeHTML() {
+async function exportRangeHTML() {
   const zip = new JSZip();
+  const pageData = {
+    type: "ranger",
+    page: filteredPages.value.map((v) => v),
+  };
+  console.log(pageData);
+
+  isConvert.value = true;
+  // /convert 요청 보내기
+  await fetch("/convert", {
+    method: "POST",
+    body: JSON.stringify(pageData), // 페이지 정보 데이터를 JSON 문자열로 변환하여 body에 포함
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const svgResponse = await fetch("/getSVGFiles");
+  const svgFiles = await svgResponse.json();
+
+  isConvert.value = false;
+
+  await svgFiles.forEach((svgFile, i) => {
+    const svgBlob = new Blob([svgFile], { type: "image/svg+xml" });
+    zip.folder("svg").file(`${fileName.value}_${String(filteredPages.value[i]).padStart(3, "0")}.svg`, svgBlob);
+  });
+
   filteredPages.value.forEach((v, i) => {
     const contentHTML = document.querySelector("html").cloneNode(true);
 
     const elReSelector =
-      "#header, .tool-bar, script, style, .pdf_wrap, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
+      "#header, .header, .tool-bar, script, style, .pdf_wrap, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
     const elReClassSelector = ".v-application";
     const elReStyleSelector = ".v-main";
 
@@ -447,6 +479,7 @@ function exportRangeHTML() {
     const _pdf = document.querySelectorAll(".pdf_wrap");
     const pdfWrap = _pdf[i].cloneNode(true);
     contentHTML.querySelector(".content").appendChild(pdfWrap);
+    contentHTML.querySelector(".pdfContainer").style.textAlign = "left";
 
     const linkElement = document.createElement("link");
     linkElement.rel = "stylesheet";
@@ -455,16 +488,23 @@ function exportRangeHTML() {
 
     contentHTML.querySelector("title").textContent = `${fileName.value}_${String(v).padStart(3, "0")}`;
     const canvas = document.querySelectorAll("canvas")[i];
+    const imageUrl = `./svg/${fileName.value}_${String(v).padStart(3, "0")}.svg`;
     const scriptContent = `
             let canvas = document.querySelector("canvas");
             const context = canvas.getContext("2d");
             const base_image = new Image();
             base_image.src = "${canvas.toDataURL()}";
-            base_image.onload = function () {
-                canvas.width = base_image.width;
-                canvas.height = base_image.height;
-                context.drawImage(base_image, 0, 0);
-            };
+            canvas.style.display = 'none';
+
+
+            const img = new Image();
+            img.src = "${imageUrl}";
+            img.onload = function () {
+              img.style.width = base_image.width;
+              img.style.height = base_image.height;
+              const pdfWrap = document.querySelector(".pdf_wrap > div");
+              pdfWrap.prepend(img);
+            }
         `;
 
     const scriptFileName = `${fileName.value}_${String(v).padStart(3, "0")}.js`;
