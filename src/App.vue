@@ -3,25 +3,14 @@
     <div
       class="convertLoading"
       style="background: rgba(0, 0, 0, 0.3); width: 100vw; height: 100vh; position: absolute; z-index: 9999"
-      v-if="isConvert"
+      v-if="isConvert || isUpload"
     >
       <div class="loading-overlay">
         <div class="loader"></div>
       </div>
       <div style="position: relative; font-size: 50px; color: #f3f3f3; top: calc(50% - -75px); text-align: center">
-        <span>변환중</span>
-      </div>
-    </div>
-    <div
-      class="convertLoading"
-      style="background: rgba(0, 0, 0, 0.3); width: 100vw; height: 100vh; position: absolute; z-index: 9999"
-      v-if="isUpload"
-    >
-      <div class="loading-overlay">
-        <div class="loader"></div>
-      </div>
-      <div style="position: relative; font-size: 50px; color: #f3f3f3; top: calc(50% - -75px); text-align: center">
-        <span>파일 업로드중</span>
+        <span v-if="isConvert">변환중</span>
+        <span v-if="isUpload">파일 업로드중</span>
       </div>
     </div>
     <div class="pdfContainer" style="text-align: center">
@@ -37,7 +26,7 @@
             <p>{{ fileName }}.pdf</p>
           </li>
 
-          <li style="margin-right: 5px" class="file_wrap">
+          <li v-if="!isFile" style="margin-right: 5px" class="file_wrap">
             <label for="file">파일 첨부</label>
             <input id="file" name="myFile" type="file" accept=".pdf" @change="changeFile" ref="fileInput" />
           </li>
@@ -167,9 +156,9 @@ function changeFile(event) {
     fileName.value = selectedFile.name.split(".").slice(0, -1).join(".");
     isFile.value = true;
     isUpload.value = true;
+
     const formData = new FormData();
     formData.append("myFile", selectedFile);
-
     fetch("/upload", {
       method: "POST",
       body: formData,
@@ -255,9 +244,10 @@ document.addEventListener("keydown", function (e) {
 });
 
 /**
- * @param {string} a
- * @param {string} b
- * @param {string} c
+ * @param {element} parentNode 최상위 부모노드
+ * @param {string} a tag 삭제
+ * @param {string} b class 삭제
+ * @param {string} c style 삭제
  */
 
 function removeEl(parentNode, a, b, c) {
@@ -299,14 +289,6 @@ function resetPage(e) {
   e.target.value = page.value;
 }
 
-const filteredPages = computed(() => {
-  const filtered = [];
-  for (let page = startPage.value; page <= lastPage.value; page++) {
-    filtered.push(page);
-  }
-  return filtered;
-});
-
 function selectChoicePage() {
   const a = document.querySelector("canvas");
   const canvasDataURL = a.toDataURL();
@@ -335,8 +317,8 @@ async function exportChoiceHTML() {
   const pageData = {
     type: "choice",
     page: selectedPage.value.map((v) => v.page),
+    fileName: fileName.value,
   };
-  console.log(pageData);
   isConvert.value = true;
   // /convert 요청 보내기
   await fetch("/convert", {
@@ -358,12 +340,12 @@ async function exportChoiceHTML() {
 
   selectedPage.value.forEach((v) => {
     const _v = v.html;
-    const elReSelector =
-      "#header, .header, script, style, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
-    const elReClassSelector = ".v-application";
-    const elReStyleSelector = ".v-main";
+    const a =
+      "#header, .header, script, style, .v-overlay-container, .convertLoading, link:not([href='./css/common.css']) , noscript";
+    const b = ".v-application";
+    const c = ".v-main";
 
-    removeEl(_v, elReSelector, elReClassSelector, elReStyleSelector);
+    removeEl(_v, a, b, c);
 
     const linkElement = document.createElement("link");
     linkElement.rel = "stylesheet";
@@ -372,6 +354,7 @@ async function exportChoiceHTML() {
     _v.querySelector(".pdfContainer").style.textAlign = "left";
     // 페이지 제목 설정
     _v.querySelector("title").textContent = `${fileName.value}_${String(v.page).padStart(3, "0")}`;
+    _v.querySelector("canvas").style.display = "none";
 
     const imageUrl = `./svg/${fileName.value}_${String(v.page).padStart(3, "0")}.svg`;
     // 스크립트 직접 추가
@@ -380,7 +363,6 @@ async function exportChoiceHTML() {
       const context = canvas.getContext("2d");
       const base_image = new Image();
       base_image.src = "${v.data}";
-      canvas.style.display = 'none';
 
 
       const img = new Image();
@@ -406,13 +388,14 @@ async function exportChoiceHTML() {
   });
 
   zip.folder("css").file("common.css", cssContent);
-  const resZip = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(resZip);
-  const aTag = document.createElement("a");
+  zip.generateAsync({ type: "blob" }).then((resZip) => {
+    const url = URL.createObjectURL(resZip);
+    const aTag = document.createElement("a");
 
-  aTag.download = fileName.value;
-  aTag.href = url;
-  aTag.click();
+    aTag.download = fileName.value;
+    aTag.href = url;
+    aTag.click();
+  });
 }
 // 개별 선택 END
 
@@ -439,13 +422,21 @@ function resetLastPage(e) {
   e.target.value = lastPage.value;
 }
 
+const filteredPages = computed(() => {
+  const filtered = [];
+  for (let page = startPage.value; page <= lastPage.value; page++) {
+    filtered.push(page);
+  }
+  return filtered;
+});
+
 async function exportRangeHTML() {
   const zip = new JSZip();
   const pageData = {
     type: "ranger",
     page: filteredPages.value.map((v) => v),
+    fileName: fileName.value,
   };
-  console.log(pageData);
 
   isConvert.value = true;
   // /convert 요청 보내기
@@ -459,22 +450,22 @@ async function exportRangeHTML() {
   const svgResponse = await fetch("/getSVGFiles");
   const svgFiles = await svgResponse.json();
 
-  isConvert.value = false;
-
   await svgFiles.forEach((svgFile, i) => {
     const svgBlob = new Blob([svgFile], { type: "image/svg+xml" });
     zip.folder("svg").file(`${fileName.value}_${String(filteredPages.value[i]).padStart(3, "0")}.svg`, svgBlob);
   });
 
+  isConvert.value = false;
+
   filteredPages.value.forEach((v, i) => {
     const contentHTML = document.querySelector("html").cloneNode(true);
 
-    const elReSelector =
-      "#header, .header, .tool-bar, script, style, .pdf_wrap, .v-overlay-container, link[href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css'], link[href='https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900&display=swap'], noscript";
-    const elReClassSelector = ".v-application";
-    const elReStyleSelector = ".v-main";
+    const a =
+      "#header, .header, .tool-bar, script, style, .pdf_wrap, .convertLoading, .v-overlay-container, link:not([href='./css/common.css']) , noscript";
+    const b = ".v-application";
+    const c = ".v-main";
 
-    removeEl(contentHTML, elReSelector, elReClassSelector, elReStyleSelector);
+    removeEl(contentHTML, a, b, c);
 
     const _pdf = document.querySelectorAll(".pdf_wrap");
     const pdfWrap = _pdf[i].cloneNode(true);
