@@ -147,6 +147,8 @@ const selectedPage = ref([]);
 const selectionType = ref("choice");
 const isConvert = ref(false);
 const isUpload = ref(false);
+let pageWidth = 0;
+let pageHeight = 0;
 
 // common START
 function changeFile(event) {
@@ -261,11 +263,22 @@ function removeEl(parentNode, a, b, c) {
   elementsToRemoveStyle.forEach((element) => {
     element.removeAttribute("style");
   });
+
+  var divElements = parentNode.querySelectorAll("div");
+
+  // 각 div 요소에서 data-v-로 시작하는 속성 제거
+  divElements.forEach(function (divElement) {
+    Array.from(divElement.attributes).forEach(function (attribute) {
+      if (attribute.name.startsWith("data-v-")) {
+        divElement.removeAttribute(attribute.name);
+      }
+    });
+  });
 }
 
 let wheelTimer; // 휠 이벤트 종료를 감지하기 위한 타이머 변수
 
-function onLoaded() {
+function onLoaded(v) {
   removeBrTags();
   text_layer.value = false;
 
@@ -273,6 +286,8 @@ function onLoaded() {
   wheelTimer = setTimeout(() => {
     text_layer.value = true;
   }, 500);
+  pageWidth = v.width;
+  pageHeight = v.height;
 }
 
 // common END
@@ -368,8 +383,8 @@ async function exportChoiceHTML() {
       const img = new Image();
       img.src = "${imageUrl}";
       img.onload = function () {
-        img.style.width = base_image.width;
-        img.style.height = base_image.height;
+        img.style.width = 'calc(var(--scale-factor) * ${pageWidth / scale.value}px)';
+        img.style.height = 'calc(var(--scale-factor) * ${pageHeight / scale.value}px)';
         const pdfWrap = document.querySelector(".pdf_wrap > div");
         pdfWrap.prepend(img);
       }
@@ -491,8 +506,8 @@ async function exportRangeHTML() {
             const img = new Image();
             img.src = "${imageUrl}";
             img.onload = function () {
-              img.style.width = base_image.width;
-              img.style.height = base_image.height;
+              img.style.width = 'calc(var(--scale-factor) * ${pageWidth / scale.value}px)';
+              img.style.height = 'calc(var(--scale-factor) * ${pageHeight / scale.value}px)';
               const pdfWrap = document.querySelector(".pdf_wrap > div");
               pdfWrap.prepend(img);
             }
