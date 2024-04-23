@@ -1,128 +1,126 @@
 <template>
-  <div id="app">
-    <div
-      class="convertLoading"
-      style="background: rgba(0, 0, 0, 0.3); width: 100vw; height: 100vh; position: absolute; z-index: 9999"
-      v-if="isConvert || isUpload"
-    >
-      <div class="loading-overlay">
-        <div class="loader"></div>
+  <div
+    class="convertLoading"
+    style="background: rgba(0, 0, 0, 0.3); width: 100vw; height: 100vh; position: absolute; z-index: 9999"
+    v-if="isConvert || isUpload"
+  >
+    <div class="loading-overlay">
+      <div class="loader"></div>
+    </div>
+    <div style="position: relative; font-size: 50px; color: #f3f3f3; top: calc(50% - -75px); text-align: center">
+      <span v-if="isConvert">변환중</span>
+      <span v-if="isUpload">파일 업로드중</span>
+    </div>
+  </div>
+  <div class="pdfContainer" style="text-align: center">
+    <div class="header">
+      <div v-if="!isFile">
+        <input type="radio" name="selectionType" id="choice" v-model="selectionType" value="choice" />
+        <label for="choice">개별 선택</label>
+        <input type="radio" name="selectionType" id="range" v-model="selectionType" value="range" />
+        <label for="range">범위 선택</label>
       </div>
-      <div style="position: relative; font-size: 50px; color: #f3f3f3; top: calc(50% - -75px); text-align: center">
-        <span v-if="isConvert">변환중</span>
-        <span v-if="isUpload">파일 업로드중</span>
+      <ul class="tool-bar" style="display: flex; justify-content: center; list-style-type: none; gap: 10px">
+        <li v-if="isFile">
+          <p>{{ fileName }}.pdf</p>
+        </li>
+
+        <li v-if="!isFile" style="margin-right: 5px" class="file_wrap">
+          <label for="file">파일 첨부</label>
+          <input id="file" name="myFile" type="file" accept=".pdf" @change="changeFile" ref="fileInput" />
+        </li>
+        <li v-if="isFile && selectionType == 'choice'" class="page_wrap">
+          <button @click="page = page > 1 ? page - 1 : page">&lt;</button>
+          <input
+            type="text"
+            :value="page"
+            @keydown.enter="changePage"
+            @focusout="resetPage"
+            @input="numInput"
+            style="width: 50px; text-align: right"
+          />
+          /
+          {{ pages }}
+          <button @click="page = page < pages ? page + 1 : page">&gt;</button>
+        </li>
+        <li v-if="isFile && selectionType == 'range'" class="rangePage_wrap">
+          <span style="margin-right: 5px">total : {{ pages }}</span>
+          <input
+            type="text"
+            id="startPage"
+            :value="startPage"
+            @keydown.enter="updateStartPages"
+            @focusout="resetStartPage"
+            @input="numInput"
+          />
+          /
+          <input
+            type="text"
+            id="lastPage"
+            :value="lastPage"
+            @keydown.enter="updateLastPages"
+            @focusout="resetLastPage"
+            @input="numInput"
+          />
+        </li>
+        <li v-if="isFile" class="scale_wrap">
+          <button @click="scale = scale > 0.5 ? scale - 0.1 : scale">-</button>
+          <span for="magnification">{{ Math.round(scale * 100) }}%</span>
+          <button @click="scale = scale < 4 ? scale + 0.1 : scale">+</button>
+        </li>
+        <li v-if="isFile && selectionType == 'choice'" class="choice_wrap">
+          <div class="select_wrap">
+            <div class="select" :class="{ open: open }" @click="open = !open">
+              {{ selectedPage.length > 0 ? page : "선택 없음" }}
+            </div>
+            <div class="items" v-if="open">
+              <div v-if="selectedPage.length < 1">선택 없음</div>
+              <div class="item" v-for="(p, i) in selectedPage" :key="i" @click="page = p.page">
+                <div>
+                  {{ p.page }}
+                </div>
+                <button @click="deletePage(i)">X</button>
+              </div>
+            </div>
+          </div>
+          <button @click="selectChoicePage">선택</button>
+        </li>
+
+        <li v-if="isFile && selectionType == 'choice'" class="export_wrap">
+          <button @click="exportChoiceHTML">내보내기</button>
+        </li>
+        <li v-if="isFile && selectionType == 'range'" class="export_wrap">
+          <button @click="exportRangeHTML">내보내기</button>
+        </li>
+        <li v-if="isFile && selectionType == 'range'">
+          <span style="color: red"> * 렌더링이 완료되면 눌러주세요 </span>
+        </li>
+      </ul>
+    </div>
+    <div
+      v-if="selectionType == 'range'"
+      class="content"
+      ref="content"
+      :style="{
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+      }"
+    >
+      <div class="pdf_wrap" v-for="page in filteredPages" :key="page">
+        <VuePDF @loaded="onLoaded" ref="vuePDFRef" :scale="scale" :pdf="pdf" :page="page" :text-layer="text_layer">
+          <div class="loading-overlay">
+            <div class="loader"></div></div
+        ></VuePDF>
       </div>
     </div>
-    <div class="pdfContainer" style="text-align: center">
-      <div class="header">
-        <div v-if="!isFile">
-          <input type="radio" name="selectionType" id="choice" v-model="selectionType" value="choice" />
-          <label for="choice">개별 선택</label>
-          <input type="radio" name="selectionType" id="range" v-model="selectionType" value="range" />
-          <label for="range">범위 선택</label>
-        </div>
-        <ul class="tool-bar" style="display: flex; justify-content: center; list-style-type: none; gap: 10px">
-          <li v-if="isFile">
-            <p>{{ fileName }}.pdf</p>
-          </li>
-
-          <li v-if="!isFile" style="margin-right: 5px" class="file_wrap">
-            <label for="file">파일 첨부</label>
-            <input id="file" name="myFile" type="file" accept=".pdf" @change="changeFile" ref="fileInput" />
-          </li>
-          <li v-if="isFile && selectionType == 'choice'" class="page_wrap">
-            <button @click="page = page > 1 ? page - 1 : page">&lt;</button>
-            <input
-              type="text"
-              :value="page"
-              @keydown.enter="changePage"
-              @focusout="resetPage"
-              @input="numInput"
-              style="width: 50px; text-align: right"
-            />
-            /
-            {{ pages }}
-            <button @click="page = page < pages ? page + 1 : page">&gt;</button>
-          </li>
-          <li v-if="isFile && selectionType == 'range'" class="rangePage_wrap">
-            <span style="margin-right: 5px">total : {{ pages }}</span>
-            <input
-              type="text"
-              id="startPage"
-              :value="startPage"
-              @keydown.enter="updateStartPages"
-              @focusout="resetStartPage"
-              @input="numInput"
-            />
-            /
-            <input
-              type="text"
-              id="lastPage"
-              :value="lastPage"
-              @keydown.enter="updateLastPages"
-              @focusout="resetLastPage"
-              @input="numInput"
-            />
-          </li>
-          <li v-if="isFile" class="scale_wrap">
-            <button @click="scale = scale > 0.5 ? scale - 0.1 : scale">-</button>
-            <span for="magnification">{{ Math.round(scale * 100) }}%</span>
-            <button @click="scale = scale < 4 ? scale + 0.1 : scale">+</button>
-          </li>
-          <li v-if="isFile && selectionType == 'choice'" class="choice_wrap">
-            <div class="select_wrap">
-              <div class="select" :class="{ open: open }" @click="open = !open">
-                {{ selectedPage.length > 0 ? page : "선택 없음" }}
-              </div>
-              <div class="items" v-if="open">
-                <div v-if="selectedPage.length < 1">선택 없음</div>
-                <div class="item" v-for="(p, i) in selectedPage" :key="i" @click="page = p.page">
-                  <div>
-                    {{ p.page }}
-                  </div>
-                  <button @click="deletePage(i)">X</button>
-                </div>
-              </div>
-            </div>
-            <button @click="selectChoicePage">선택</button>
-          </li>
-
-          <li v-if="isFile && selectionType == 'choice'" class="export_wrap">
-            <button @click="exportChoiceHTML">내보내기</button>
-          </li>
-          <li v-if="isFile && selectionType == 'range'" class="export_wrap">
-            <button @click="exportRangeHTML">내보내기</button>
-          </li>
-          <li v-if="isFile && selectionType == 'range'">
-            <span style="color: red"> * 렌더링이 완료되면 눌러주세요 </span>
-          </li>
-        </ul>
-      </div>
-      <div
-        v-if="selectionType == 'range'"
-        class="content"
-        ref="content"
-        :style="{
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-        }"
-      >
-        <div class="pdf_wrap" v-for="page in filteredPages" :key="page">
-          <VuePDF @loaded="onLoaded" ref="vuePDFRef" :scale="scale" :pdf="pdf" :page="page" :text-layer="text_layer">
-            <div class="loading-overlay">
-              <div class="loader"></div></div
-          ></VuePDF>
-        </div>
-      </div>
-      <div v-if="selectionType == 'choice'" class="content" ref="content" :style="{}">
-        <div class="pdf_wrap">
-          <VuePDF @loaded="onLoaded" ref="vuePDFRef" :scale="scale" :pdf="pdf" :page="page" :text-layer="text_layer"
-            ><div class="loading-overlay">
-              <div class="loader"></div>
-            </div>
-          </VuePDF>
-        </div>
+    <div v-if="selectionType == 'choice'" class="content" ref="content" :style="{}">
+      <div class="pdf_wrap">
+        <VuePDF @loaded="onLoaded" ref="vuePDFRef" :scale="scale" :pdf="pdf" :page="page" :text-layer="text_layer"
+          ><div class="loading-overlay">
+            <div class="loader"></div>
+          </div>
+        </VuePDF>
       </div>
     </div>
   </div>
@@ -558,9 +556,8 @@ export default {
   },
 };
 </script>
-<style scoped></style>
 
-<style lang="scss" scoped>
+<style lang="scss">
 @import "./style/annotationLayer.css";
 @import "./style/reset.css";
 
